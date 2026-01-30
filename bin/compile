@@ -40,17 +40,34 @@ fi
 
 export PATH="${PATH}:${BUILD_DIR}/bin"
 
+# Hack : set java opts to half of available memory
+mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+mem_mb=$((mem_kb / 1024))
+heap_mb=$((mem_mb / 2))
+if echo "${JAVA_OPTS:-}" | grep -q "\-Xms"; then
+  export LS_JAVA_OPTS="$JAVA_OPTS"
+else
+  export LS_JAVA_OPTS="-Xmx${heap_mb}m -Xms${heap_mb}m $JAVA_OPTS"
+fi
+
+echo "LS_JAVA_OPTS=$LS_JAVA_OPTS" | indent
 
 echo "Installing plugins" | indent
 
-# Always install logstash-output-opensearch
-echo "Installing plugin logstash-output-opensearch" | indent
-logstash-plugin install "logstash-output-opensearch"
+# Always install logstash-output-opensearch first
+if [ -n "$LOGSTASH_PLUGINS" ]; then
+  LOGSTASH_PLUGINS="logstash-output-opensearch,$LOGSTASH_PLUGINS"
+else
+  LOGSTASH_PLUGINS="logstash-output-opensearch"
+fi
 
-# Install other plugins:
 for plugin in $(echo $LOGSTASH_PLUGINS | sed "s/,/ /g") ; do
+  start_time=$(date +%s)
   echo "Installing plugin $plugin" | indent
   logstash-plugin install "${plugin}" | indent
+  end_time=$(date +%s)
+  duration=$((end_time - start_time))
+  echo "Plugin installation took ${duration} seconds" | indent
 done
 
 echo "Done" | indent
